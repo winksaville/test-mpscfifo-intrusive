@@ -2,7 +2,7 @@
  * This software is released into the public domain.
  */
 
-#define NDEBUG
+//#define NDEBUG
 
 #define _DEFAULT_SOURCE
 
@@ -60,7 +60,7 @@ bool MsgPool_init(MsgPool_t* pool, uint32_t msg_count) {
       tid(), pool, msg_count);
 
   // Allocate messages
-  msgs = malloc(sizeof(Msg_t) * (msg_count + 1));
+  msgs = malloc(sizeof(Msg_t) * msg_count);
   if (msgs == NULL) {
     printf("%ld  MsgPool_init:-pool=%p ERROR unable to allocate messages, aborting msg_count=%u\n",
         tid(), pool, msg_count);
@@ -68,22 +68,19 @@ bool MsgPool_init(MsgPool_t* pool, uint32_t msg_count) {
     goto done;
   }
 
+  // Initialize the fifo
+  initMpscFifo(&pool->fifo);
+
   // Output info on the pool and messages
   DPF("%ld  MsgPool_init: pool=%p &msgs[0]=%p &msgs[1]=%p sizeof(Msg_t)=%lu(0x%lx)\n",
       tid(), pool, &msgs[0], &msgs[1], sizeof(Msg_t), sizeof(Msg_t));
 
-  // Create pool first message will be stub
+  // Create pool
   for (uint32_t i = 0; i <= msg_count; i++) {
     Msg_t* msg = &msgs[i];
-    DPF("%ld  MsgPool_init: add %u msg=%p%s\n", tid(), i, msg, i == 0 ? " stub" : "");
     msg->pPool = &pool->fifo;
-    if (i == 0) {
-      // Use first msg to init pool
-      initMpscFifo(&pool->fifo, msg);
-    } else {
-      // Add remaining msgw to pool
-      add(&pool->fifo, msg);
-    }
+    DPF("%ld  MsgPool_init: add %u msg=%p msg->pPool=%p\n", tid(), i, msg, msg->pPool);
+    add(&pool->fifo, msg);
   }
 
   DPF("%ld  MsgPool_init: pool=%p, pHead=%p, pTail=%p sizeof(*pool)=%lu(0x%lx)\n",
@@ -139,12 +136,15 @@ void MsgPool_deinit(MsgPool_t* pool) {
 }
 
 Msg_t* MsgPool_get_msg(MsgPool_t* pool) {
+  DPF("%ld  MsgPool_get_msg:+pool=%p\n", tid(), pool);
   Msg_t* msg = rmv(&pool->fifo);
   if (msg != NULL) {
     msg->pRspQ = NULL;
     msg->arg1 = 0;
     msg->arg2 = 0;
+    DPF("%ld  MsgPool_get_msg: pool=%p got msg=%p pool=%p\n", tid(), pool, msg, msg->pPool);
   }
+  DPF("%ld  MsgPool_get_msg:+pool=%p msg=%p\n", tid(), pool, msg);
   return msg;
 }
 
@@ -240,16 +240,16 @@ static void* client(void* p) {
 
   // Init local msg pool
   DPF("%ld  client: init msg pool=%p\n", tid(), &cp->pool);
-  bool error = MsgPool_init(&cp->pool, cp->msg_count + 1); // One more for the cmdFifo
+  bool error = MsgPool_init(&cp->pool, cp->msg_count);
   if (error) {
     printf("%ld  client: param=%p ERROR unable to create msgs for pool\n", tid(), p);
     cp->error_count += 1;
   }
 
   // Init cmdFifo
-  Msg_t* stub = MsgPool_get_msg(&cp->pool);
-  initMpscFifo(&cp->cmdFifo, stub);
-  DPF("%ld  client: param=%p cp->cmdFifo=%p stub=%p\n", tid(), p, &cp->cmdFifo, stub);
+  initMpscFifo(&cp->cmdFifo);
+
+  DPF("%ld  client: param=%p cp->cmdFifo=%p\n", tid(), p, &cp->cmdFifo);
 
 
   // Signal we're ready
@@ -428,16 +428,14 @@ bool multi_thread_main(const uint32_t client_count, const uint64_t loops,
   }
 
   DPF("%ld  multi_thread_msg: init msg pool=%p\n", tid(), &pool);
-  error = MsgPool_init(&pool, msg_count + 1); // + 1 for cmdFifo stub
+  error = MsgPool_init(&pool, msg_count);
   if (error) {
     printf("%ld  multi_thread_msg: ERROR Unable to allocate messages, aborting\n", tid());
     goto done;
   }
 
-  Msg_t* stub = MsgPool_get_msg(&pool);
-  initMpscFifo(&cmdFifo, stub);
-  DPF("%ld  multi_thread_msg: cmdFifo=%p stub=%p\n", tid(), &cmdFifo, stub);
-
+  initMpscFifo(&cmdFifo);
+  DPF("%ld  multi_thread_msg: cmdFifo=%p\n", tid(), &cmdFifo);
 
   // Create the clients
   for (uint32_t i = 0; i < client_count; i++, clients_created++) {
@@ -488,7 +486,7 @@ bool multi_thread_main(const uint32_t client_count, const uint64_t loops,
 
   clock_gettime(CLOCK_REALTIME, &time_looping);
 
-  // Loop though all the clients asking them to send to thier peers
+  // Loop though all the clients asking them to send to their peers
   for (uint32_t i = 0; i < loops; i++) {
     for (uint32_t c = 0; c < clients_created; c++) {
       // Test both flavors of rmv

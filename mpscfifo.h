@@ -45,17 +45,14 @@ typedef struct MpscFifo_t {
 
 
 /**
- * Initialize an MpscFifo_t. Don't forget to empty the fifo
- * and delete the stub before freeing MpscFifo_t.
+ * Initialize an MpscFifo_t. Don't forget to empty the fifo.
  */
 extern MpscFifo_t *initMpscFifo(MpscFifo_t *pQ);
 
 /**
- * Deinitialize the MpscFifo_t and return the stub if this routine
- * can't return it to its pool.  Assumes the fifo is empty and
- * the only member is the stub.
+ * Deinitialize the MpscFifo_t, assumes the fifo is empty.
  */
-extern Msg_t *deinitMpscFifo(MpscFifo_t *pQ);
+extern void deinitMpscFifo(MpscFifo_t *pQ);
 
 /**
  * Add a Msg_t to the Queue. This maybe used by multiple
