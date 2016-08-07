@@ -10,7 +10,7 @@
  * to the head of the queue and removed from the tail.
  */
 
-//#define NDEBUG
+#define NDEBUG
 
 #define _DEFAULT_SOURCE
 
@@ -34,6 +34,11 @@ MpscFifo_t *initMpscFifo(MpscFifo_t *pQ) {
   DPF("%ld  initMpscFifo:*pQ=%p\n", pthread_self(), pQ);
   pQ->pHead = &pQ->stub;
   pQ->pTail = &pQ->stub;
+  pQ->stub.pNext = NULL;
+  pQ->stub.pPool = NULL;
+  pQ->stub.pRspQ = NULL;
+  pQ->stub.arg1 = 11110001;
+  pQ->stub.arg2 = 11110002;;
   return pQ;
 }
 
@@ -157,7 +162,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
     // Nothing has been removed since Q was last empty
     if (pNext == NULL) {
       // Queue is empty
-      DPF("%ld  rmv: is EMPTY pQ=%p msg=NULL\n", pthread_self(), pQ);
+      DPF("%ld  rmv:-is EMPTY pQ=%p msg=NULL\n", pthread_self(), pQ);
       return NULL;
     }
     // Advance tail to real "tail"

@@ -2,7 +2,7 @@
  * This software is released into the public domain.
  */
 
-//#define NDEBUG
+#define NDEBUG
 
 #define _DEFAULT_SOURCE
 
@@ -76,7 +76,7 @@ bool MsgPool_init(MsgPool_t* pool, uint32_t msg_count) {
       tid(), pool, &msgs[0], &msgs[1], sizeof(Msg_t), sizeof(Msg_t));
 
   // Create pool
-  for (uint32_t i = 0; i <= msg_count; i++) {
+  for (uint32_t i = 0; i < msg_count; i++) {
     Msg_t* msg = &msgs[i];
     msg->pPool = &pool->fifo;
     DPF("%ld  MsgPool_init: add %u msg=%p msg->pPool=%p\n", tid(), i, msg, msg->pPool);
