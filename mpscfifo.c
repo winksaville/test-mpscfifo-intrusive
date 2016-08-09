@@ -167,6 +167,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
     pTail = pNext;
     pNext = pNext->pNext;
   }
+
   if (pNext != NULL) {
     // Not empty and there are more elements
     pQ->pTail = pNext;
@@ -219,14 +220,13 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
 /**
  * Stall waiting for a producer to finish.
  */
-static inline Msg_t* stall(Msg_t* pTail) {
-  while (true) {
-    Msg_t* pNext = pTail->pNext;
-    if (pNext != NULL) {
-      return pNext;
-    }
+static inline Msg_t* stall(MpscFifo_t* pQ) {
+  Msg_t* pMsg = rmv_non_stalling(pQ);
+  while (pMsg == NULL) {
     sched_yield();
+    pMsg = rmv_non_stalling(pQ);
   }
+  return pMsg;
 }
 
 /**
@@ -266,7 +266,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
       // Therefore we'll stall until the producer finishes and it
       // updates pTail->pNext to non-null and then we'll return pTail.
       DPF(LDR "rmv:5 got msg before stalling, Q has 1 or more msgs pQ=%p count=%d\n", ldr(), pQ, pQ->count);
-      pNext = stall(pTail);
+      pNext = stall(pQ);
       DPF(LDR "rmv:6 got msg after stalling, Q has 1 or more msgs pQ=%p count=%d pNext=%p\n", ldr(), pQ, pQ->count, pNext);
     } else {
       // Second pHead == pTail then this is the last element
@@ -284,7 +284,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
         // until the producer finishes and it updates pTail->pNext
         // to non-null and then we'll return pTail.
         DPF(LDR "rmv:A 1 msg but preempted, before stalling, is not EMPTY pQ=%p count=%d\n", ldr(), pQ, pQ->count);
-        pNext = stall(pTail);
+        pNext = stall(pQ);
         DPF(LDR "rmv:B 1 msg but preempted, after stalling, is not EMPTY pQ=%p count=%d pNext=%p\n", ldr(), pQ, pQ->count, pNext);
       }
     }
