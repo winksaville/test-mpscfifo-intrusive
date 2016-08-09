@@ -16,6 +16,10 @@
 
 #define DELAY 0
 
+#ifndef NDEBUG
+#define COUNT
+#endif
+
 #include "mpscfifo.h"
 #include "dpf.h"
 
@@ -88,7 +92,9 @@ void add(MpscFifo_t *pQ, Msg_t *pMsg) {
 #endif
   if (pMsg != &pQ->stub) {
     // Don't count adding the stub
+#ifdef COUNT
     pQ->count += 1;
+#endif
   }
   DPF(LDR "add: pQ=%p count=%d pPrev=%p pPrev->pNext=%p\n", ldr(), pQ, pQ->count, pPrev, pPrev->pNext);
   DPF(LDR "add: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
@@ -123,7 +129,6 @@ void ret(MpscFifo_t *pQ, Msg_t *pMsg) {
   Msg_t* pPrev = __atomic_exchange_n(ptr_pHead, pMsg, __ATOMIC_ACQ_REL); //SEQ_CST);
   // rmv will stall spinning if preempted at this critical spot
 
-
 #if DELAY != 0
   usleep(DELAY);
 #endif
@@ -133,7 +138,9 @@ void ret(MpscFifo_t *pQ, Msg_t *pMsg) {
 #endif
   if (pMsg != &pQ->stub) {
     // Don't count adding the stub
+#ifdef COUNT
     pQ->count += 1;
+#endif
   }
   DPF(LDR "ret: pQ=%p count=%d pPrev=%p pPrev->pNext=%p\n", ldr(), pQ, pQ->count, pPrev, pPrev->pNext);
   DPF(LDR "ret: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
@@ -196,7 +203,9 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
   }
   if (pTail != NULL) {
     pTail->pNext = NULL;
+#ifdef COUNT
     pQ->count -= 1;
+#endif
     DPF(LDR "rmv_non_stalling:6-got msg pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->arg1, pTail->arg2);
   } else {
     DPF(LDR "rmv_non_stalling:7-NO msg pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
@@ -282,7 +291,9 @@ Msg_t *rmv(MpscFifo_t *pQ) {
   }
   if (pTail != NULL) {
     pTail->pNext = NULL;
+#ifdef COUNT
     pQ->count -= 1;
+#endif
     DPF(LDR "rmv:C got msg pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
     DPF(LDR "rmv:D got msg pQ=%p count=%d nxt=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pNext, pNext->pPool, pNext->pNext, pNext->arg1, pNext->arg2);
     DPF(LDR "rmv:E-got msg pQ=%p count=%d msg=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->pNext, pTail->arg1, pTail->arg2);
