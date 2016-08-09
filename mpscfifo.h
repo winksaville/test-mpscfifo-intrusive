@@ -15,14 +15,31 @@
 
 #include <stdint.h>
 
+/** mfence instruction */
+static inline void mfence(void) {
+  __asm__ volatile ("mfence": : :"memory");
+}
+
+/** lfence instruction */
+static inline void lfence(void) {
+  __asm__ volatile ("lfence": : :"memory");
+}
+
+/** sfence instruction */
+static inline void sfence(void) {
+  __asm__ volatile ("sfence": : :"memory");
+}
+
 typedef struct MpscFifo_t MpscFifo_t;
 typedef struct Msg_t Msg_t;
+
+#define VOLATILE volatile
 
 #define USE_ATOMIC_TYPES 1
 
 typedef struct Msg_t {
 #if USE_ATOMIC_TYPES
-  _Atomic(Msg_t*) pNext __attribute__ (( aligned (64) )); // Next message
+  _Atomic(Msg_t*) VOLATILE pNext __attribute__ (( aligned (64) )); // Next message
 #else
   Msg_t* pNext __attribute__ (( aligned (64) )); // Next message
 #endif
@@ -34,14 +51,22 @@ typedef struct Msg_t {
 
 typedef struct MpscFifo_t {
 #if USE_ATOMIC_TYPES
-  _Atomic(Msg_t*) pHead __attribute__(( aligned (64) ));
+  _Atomic(Msg_t*) VOLATILE pHead __attribute__(( aligned (64) ));
   _Atomic(Msg_t*) pTail __attribute__(( aligned (64) ));
 #else
   Msg_t* pHead __attribute__(( aligned (64) ));
   Msg_t* pTail __attribute__(( aligned (64) ));
 #endif
+  VOLATILE _Atomic(uint32_t) count;
   Msg_t stub;
 } MpscFifo_t;
+
+extern _Atomic(uint64_t) gTick;
+
+#define LDR "%6ld %lx  "
+#define ldr() ++gTick, pthread_self()
+
+#define CRASH() do { *((volatile uint8_t*)0) = 0; } while(0)
 
 
 /**
@@ -87,7 +112,7 @@ extern Msg_t *rmv_no_dbg_on_empty(MpscFifo_t *pQ);
 /**
  * Return the message to its pool.
  */
-extern void ret(Msg_t* pMsg);
+extern void ret_msg(Msg_t* pMsg);
 
 /**
  * Send a response arg1 if the msg->pRspQ != NULL otherwise ret msg
