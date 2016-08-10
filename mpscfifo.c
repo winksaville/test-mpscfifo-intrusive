@@ -227,19 +227,6 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
 }
 
 /**
- * Stall waiting for a producer to finish updating pTail->pNext
- * to a non-null value.
- */
-static inline Msg_t* stall(Msg_t* pTail) {
-  Msg_t* pNext = pTail->pNext;
-  while (pNext == NULL) {
-    sched_yield();
-    pNext = pTail->pNext;
-  }
-  return pNext;
-}
-
-/**
  * @see mpscifo.h
  */
 Msg_t *rmv(MpscFifo_t *pQ) {
@@ -288,8 +275,14 @@ Msg_t *rmv(MpscFifo_t *pQ) {
       // since pNext == NULL we need to stall below waiting for
       // the producer to finish setting its pNext.
     }
+
     DPF(LDR "rmv:5 before stalling until pNext != NULL, pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
-    pNext = stall(pTail);
+    // Stall waiting for producer to update pTail->pNext
+    pNext = pTail->pNext;
+    while (pNext == NULL) {
+      sched_yield();
+      pNext = pTail->pNext;
+    }
     DPF(LDR "rmv:6  after  stalling now  pNext != NULL,  pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
   } else {
     // pNext != NULL and and there is more than one msg so we're golden.
