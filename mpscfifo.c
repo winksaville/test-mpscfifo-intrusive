@@ -159,7 +159,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
     // Nothing has been removed since Q was last empty
     if (pNext == NULL) {
       // Queue is empty
-      DPF(LDR "rmv_non_stalling:1-is EMPTY pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
+      DPF(LDR "rmv_non_stalling:1-NO MSGS pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
       return NULL;
     }
     // Advance tail to real "tail"
@@ -168,6 +168,15 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
     pNext = pNext->pNext;
   }
 
+  // We know there is at least 1 msg on the fifo and
+  // pTail is pointing directly at that msg. Also pHead
+  // is pointing at the same msg if there is only one msg
+  // and otherwise there is more that one msg.
+  //
+  // Since this is non_stalling we may not be able to return
+  // pTail if a producer was preempted so will return NULL
+  // and the caller will need to call this or rmv to in
+  // the future.
   if (pNext != NULL) {
     // Not empty and there are more elements
     pQ->pTail = pNext;
@@ -181,7 +190,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
       // First pHead != pTail then we know we were unlucky and a
       // producer was preempted. So we're not really empty but
       // since this is non-stalling we'll return NULL.
-      DPF(LDR "rmv_non_stalling:3 preempted not really 'empty' pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
+      DPF(LDR "rmv_non_stalling:3 got msg preempted not really 'empty' pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
       pTail = NULL;
     } else {
       // Second pHead == pTail then this is the last element
@@ -191,14 +200,14 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
       pNext = pTail->pNext;
       if (pNext != NULL) {
         pQ->pTail = pNext;
-        DPF(LDR "rmv_non_stalling:4 1 msg and got it, Q is now EMPTY pQ=%p count=%d pTail=%p &pQ->stub=%p\n", ldr(), pQ, pQ->count, pQ->pTail, &pQ->stub);
+        DPF(LDR "rmv_non_stalling:4 got msg, Q is now EMPTY pQ=%p count=%d pTail=%p &pQ->stub=%p\n", ldr(), pQ, pQ->count, pQ->pTail, &pQ->stub);
       } else {
         // While we added our node another thread also added a node
         // and the fifo isn't complete (?). Therefore we can't
         // remove this element until the other producer finishes
         // and since this is non-stalling return NULL.
         pTail = NULL;
-        DPF(LDR "rmv_non_stalling:5 1 msg but preempted, is not EMPTY pQ=%p count=%d\n", ldr(), pQ, pQ->count);
+        DPF(LDR "rmv_non_stalling:5 got msg but preempted and not EMPTY pQ=%p count=%d\n", ldr(), pQ, pQ->count);
       }
     }
   }
@@ -209,7 +218,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
 #endif
     DPF(LDR "rmv_non_stalling:6-got msg pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->arg1, pTail->arg2);
   } else {
-    DPF(LDR "rmv_non_stalling:7-NO msg pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
+    DPF(LDR "rmv_non_stalling:7-NO msg pQ=%p count=%d returning NULL\n", ldr(), pQ, pQ->count);
   }
   return pTail;
 #else
@@ -218,15 +227,16 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
 }
 
 /**
- * Stall waiting for a producer to finish.
+ * Stall waiting for a producer to finish updating pTail->pNext
+ * to a non-null value.
  */
-static inline Msg_t* stall(MpscFifo_t* pQ) {
-  Msg_t* pMsg = rmv_non_stalling(pQ);
-  while (pMsg == NULL) {
+static inline Msg_t* stall(Msg_t* pTail) {
+  Msg_t* pNext = pTail->pNext;
+  while (pNext == NULL) {
     sched_yield();
-    pMsg = rmv_non_stalling(pQ);
+    pNext = pTail->pNext;
   }
-  return pMsg;
+  return pNext;
 }
 
 /**
@@ -241,7 +251,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
     // Nothing has been removed since Q was last empty
     if (pNext == NULL) {
       // Queue is empty
-      DPF(LDR "rmv:1-is EMPTY pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
+      DPF(LDR "rmv:1-NO MSGS pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
       return NULL;
     }
     // Advance tail to real "tail"
@@ -250,56 +260,53 @@ Msg_t *rmv(MpscFifo_t *pQ) {
     pNext = pTail->pNext;
     DPF(LDR "rmv:2 adv to real 'tail' pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
   }
-  if (pNext != NULL) {
-    // Not empty and there are more elements
-    pQ->pTail = pNext;
-    DPF(LDR "rmv:3 got msg and Q has 1 or more msgs pQ=%p count=%d\n", ldr(), pQ, pQ->count);
-  } else {
-    // pNext == NULL, we've reached the end of the fifo as known by pQ->pTail and
-    // two conditions now exist, either this is the last element or a producer
-    // was preempted and pNext hasn't yet been updated.
-    DPF(LDR "rmv:4 pNext == NULL, last element or preempted pQ=%p count=%d\n", ldr(), pQ, pQ->count);
+
+  // We know there is at least 1 msg on the fifo and
+  // pTail is pointing directly at that msg. Also pHead
+  // is pointing at the same msg if there is only one msg
+  // and otherwise there is more that one msg.
+  DPF(LDR "rmv:3 pTail is the message we'll be returning pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
+  if (pNext == NULL) {
+    // We've reached the end of the fifo as known by pQ->pTail and
+    // two conditions now exist, either this is the last element or
+    // a producer was preempted and pNext hasn't yet been updated.
+    // We can tell the difference by testing if pTail != pHead.
+    DPF(LDR "rmv:3 pTail is last element or preempted pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
     Msg_t* pHead = pQ->pHead;
-    if (pTail != pHead) {
-      // First pHead != pTail then we know we were unlucky and a
-      // producer was preempted while adding and left pNext == NULL.
-      // Therefore we'll stall until the producer finishes and it
-      // updates pTail->pNext to non-null and then we'll return pTail.
-      DPF(LDR "rmv:5 got msg before stalling, Q has 1 or more msgs pQ=%p count=%d\n", ldr(), pQ, pQ->count);
-      pNext = stall(pQ);
-      DPF(LDR "rmv:6 got msg after stalling, Q has 1 or more msgs pQ=%p count=%d pNext=%p\n", ldr(), pQ, pQ->count, pNext);
-    } else {
-      // Second pHead == pTail then this is the last element
-      // in which case we'll add stub to signify the Q if empty.
-      DPF(LDR "rmv:7 1 msg, add stub to pQ=%p\n", ldr(), pQ);
+    if (pTail == pHead) {
+      // Since they are equal we know that at the moment there
+      // is only one msg on the fifo and that when we remove
+      // it the fifo will be empty.
+      //
+      // Therefore we need to add the stub to the fifo for this case.
+      // and then stall below incase we were racing with another
+      // producer that may have been interrupted.
+      DPF(LDR "rmv:4 pTail is only msg so add stub to pQ=%p pQ->count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
       add(pQ, &pQ->stub);
-      pNext = pTail->pNext;
-      DPF(LDR "rmv:8 1 msg, added stub to pQ=%p count=%d new pNext=%p\n", ldr(), pQ, pQ->count, pNext);
-      if (pNext != NULL) {
-        pQ->pTail = pNext;
-        DPF(LDR "rmv:9 1 msg and got it, Q is now EMPTY pQ=%p count=%d pTail=%p &pQ->stub=%p pNext=%p\n", ldr(), pQ, pQ->count, pQ->pTail, &pQ->stub, pNext);
-      } else {
-        // While we added our stub node another thread also adding a node
-        // and it was preempted and eaving pNext == NULL. So we'll stall
-        // until the producer finishes and it updates pTail->pNext
-        // to non-null and then we'll return pTail.
-        DPF(LDR "rmv:A 1 msg but preempted, before stalling, is not EMPTY pQ=%p count=%d\n", ldr(), pQ, pQ->count);
-        pNext = stall(pQ);
-        DPF(LDR "rmv:B 1 msg but preempted, after stalling, is not EMPTY pQ=%p count=%d pNext=%p\n", ldr(), pQ, pQ->count, pNext);
-      }
+    } else {
+      // pTail != pHead so there is more than one element but
+      // since pNext == NULL we need to stall below waiting for
+      // the producer to finish setting its pNext.
     }
-  }
-  if (pTail != NULL) {
-    pTail->pNext = NULL;
-#ifdef COUNT
-    pQ->count -= 1;
-#endif
-    DPF(LDR "rmv:C got msg pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
-    DPF(LDR "rmv:D got msg pQ=%p count=%d nxt=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pNext, pNext->pPool, pNext->pNext, pNext->arg1, pNext->arg2);
-    DPF(LDR "rmv:E-got msg pQ=%p count=%d msg=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->pNext, pTail->arg1, pTail->arg2);
+    DPF(LDR "rmv:5 before stalling until pNext != NULL, pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
+    pNext = stall(pTail);
+    DPF(LDR "rmv:6  after  stalling now  pNext != NULL,  pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
   } else {
-    DPF(LDR "rmv:F-NO msg pQ=%p count=%d msg=NULL\n", ldr(), pQ, pQ->count);
+    // pNext != NULL and and there is more than one msg so we're golden.
   }
+
+  // All paths above guranttee that pNext != NULL and we
+  // can remove pTail by setting pQ->pTail = pNext.
+  pQ->pTail = pNext;
+#ifdef COUNT
+  pQ->count -= 1; // Decrement number of msgs
+#endif
+  pTail->pNext = NULL; // Not strictly necessary but may induce FAST FAILURE
+
+  // Print state approximate state at this time, note these can change!!!
+  DPF(LDR "rmv:7 got msg pQ=%p count=%d pQ->pHead=%p pQ->pHead->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext);
+  DPF(LDR "rmv:8 got msg pQ=%p count=%d pQ->pTail=%p pQ->pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pTail, pQ->pTail->pNext);
+  DPF(LDR "rmv:9-got msg pQ=%p count=%d msg=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->pNext, pTail->arg1, pTail->arg2);
   return pTail;
 #else
   DPF(LDR "rmv:#NOT coded\n", ldr());
