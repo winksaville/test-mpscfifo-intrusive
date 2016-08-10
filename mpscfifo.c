@@ -185,8 +185,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
     // We've reached the end of the fifo as known by pQ->pTail and
     // two conditions now exist either this is the last element
     // or the producer was preempted.
-    Msg_t* pHead = pQ->pHead;
-    if (pTail != pHead) {
+    if (pTail != pQ->pHead) {
       // First pHead != pTail then we know we were unlucky and a
       // producer was preempted. So we're not really empty but
       // since this is non-stalling we'll return NULL.
@@ -256,8 +255,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
     // a producer was preempted and pNext hasn't yet been updated.
     // We can tell the difference by testing if pTail != pHead.
     DPF(LDR "rmv:3 pTail is last element or preempted pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
-    Msg_t* pHead = pQ->pHead;
-    if (pTail == pHead) {
+    if (pTail == pQ->pHead) {
       // Since they are equal we know that at the moment there
       // is only one msg on the fifo and that when we remove
       // it the fifo will be empty.
