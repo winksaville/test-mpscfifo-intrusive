@@ -211,15 +211,12 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
       }
     }
   }
-  if (pTail != NULL) {
-    pTail->pNext = NULL;
 #ifdef COUNT
+  if (pTail != NULL) {
     pQ->count -= 1;
-#endif
-    DPF(LDR "rmv_non_stalling:6-got msg pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->arg1, pTail->arg2);
-  } else {
-    DPF(LDR "rmv_non_stalling:7-NO msg pQ=%p count=%d returning NULL\n", ldr(), pQ, pQ->count);
   }
+#endif
+  DPF(LDR "rmv_non_stalling:6-pQ=%p count=%d msg=%p\n", ldr(), pQ, pQ->count, pTail);
   return pTail;
 #else
   DPF(LDR "rmv_non_stalling: NOT coded\n", ldr());

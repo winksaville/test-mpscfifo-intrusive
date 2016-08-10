@@ -5,7 +5,7 @@
 #define NDEBUG
 
 #define _DEFAULT_SOURCE
-#define USE_RMV 1
+#define USE_RMV 0
 
 #if USE_RMV
 #define RMV rmv
