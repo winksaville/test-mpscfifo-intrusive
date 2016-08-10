@@ -52,7 +52,7 @@ typedef struct Msg_t {
 typedef struct MpscFifo_t {
 #if USE_ATOMIC_TYPES
   _Atomic(Msg_t*) VOLATILE pHead __attribute__(( aligned (64) ));
-  _Atomic(Msg_t*) pTail __attribute__(( aligned (64) ));
+  Msg_t* pTail __attribute__(( aligned (64) ));
 #else
   Msg_t* pHead __attribute__(( aligned (64) ));
   Msg_t* pTail __attribute__(( aligned (64) ));
