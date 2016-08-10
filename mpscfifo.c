@@ -294,7 +294,6 @@ Msg_t *rmv(MpscFifo_t *pQ) {
 #ifdef COUNT
   pQ->count -= 1; // Decrement number of msgs
 #endif
-  pTail->pNext = NULL; // Not strictly necessary but may induce FAST FAILURE
 
   // Print state approximate state at this time, note these can change!!!
   DPF(LDR "rmv:7 got msg pQ=%p count=%d pQ->pHead=%p pQ->pHead->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext);
