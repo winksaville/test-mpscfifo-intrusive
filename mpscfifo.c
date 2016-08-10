@@ -38,7 +38,7 @@
 /**
  * @see mpscfifo.h
  */
-MpscFifo_t *initMpscFifo(MpscFifo_t *pQ) {
+MpscFifo_t* initMpscFifo(MpscFifo_t* pQ) {
   DPF(LDR "initMpscFifo:*pQ=%p\n", ldr(), pQ);
   pQ->pHead = &pQ->stub;
   pQ->pTail = &pQ->stub;
@@ -54,7 +54,7 @@ MpscFifo_t *initMpscFifo(MpscFifo_t *pQ) {
 /**
  * @see mpscfifo.h
  */
-void deinitMpscFifo(MpscFifo_t *pQ) {
+void deinitMpscFifo(MpscFifo_t* pQ) {
   pQ->pHead = NULL;
   pQ->pTail = NULL;
 }
@@ -62,7 +62,7 @@ void deinitMpscFifo(MpscFifo_t *pQ) {
 /**
  * @see mpscifo.h
  */
-void add(MpscFifo_t *pQ, Msg_t *pMsg) {
+void add(MpscFifo_t* pQ, Msg_t* pMsg) {
   DPF(LDR "add:+pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
   DPF(LDR "add: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
 #if USE_ATOMIC_TYPES
@@ -107,7 +107,7 @@ void add(MpscFifo_t *pQ, Msg_t *pMsg) {
  * entities on the same or different thread. This will never
  * block as it is a wait free algorithm.
  */
-void ret(MpscFifo_t *pQ, Msg_t *pMsg) {
+void ret(MpscFifo_t* pQ, Msg_t* pMsg) {
   DPF(LDR "ret:+pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
   DPF(LDR "ret: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
   assert(pMsg->pPool == pQ);
@@ -150,7 +150,7 @@ void ret(MpscFifo_t *pQ, Msg_t *pMsg) {
 /**
  * @see mpscifo.h
  */
-Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
+Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
 #if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;
@@ -225,7 +225,7 @@ Msg_t *rmv_non_stalling(MpscFifo_t *pQ) {
 /**
  * @see mpscifo.h
  */
-Msg_t *rmv(MpscFifo_t *pQ) {
+Msg_t* rmv(MpscFifo_t* pQ) {
 #if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;
@@ -303,7 +303,7 @@ Msg_t *rmv(MpscFifo_t *pQ) {
 /**
  * @see mpscifo.h
  */
-Msg_t *rmv_no_dbg_on_empty(MpscFifo_t *pQ) {
+Msg_t* rmv_no_dbg_on_empty(MpscFifo_t* pQ) {
 #if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;

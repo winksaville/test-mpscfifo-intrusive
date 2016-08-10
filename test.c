@@ -114,7 +114,7 @@ void MsgPool_deinit(MsgPool_t* pool) {
     // Empty the pool
     DPF(LDR "MsgPool_deinit: pool=%p pool->msg_count=%u\n", ldr(), pool, pool->msg_count);
     for (uint32_t i = 0; i < pool->msg_count; i++) {
-      Msg_t *msg;
+      Msg_t* msg;
 
       // Wait until this is returned
       // TODO: Bug it may never be returned!
@@ -662,7 +662,7 @@ done:
   return error;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   bool error = false;
 
   if (argc != 4) {
