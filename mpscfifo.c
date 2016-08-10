@@ -67,7 +67,7 @@ void add(MpscFifo_t* pQ, Msg_t* pMsg) {
   DPF(LDR "add: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
 #if USE_ATOMIC_TYPES
   pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_SEQ_CST);
+  Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
 
 #if DELAY != 0
@@ -78,14 +78,14 @@ void add(MpscFifo_t* pQ, Msg_t* pMsg) {
   //mfence();
 #else
   pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL); //SEQ_CST);
+  Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
 
 #if DELAY != 0
   usleep(DELAY);
 #endif
 
-  __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE); //SEQ_CST);
+  __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE);
 #endif
   if (pMsg != &pQ->stub) {
     // Don't count adding the stub
@@ -110,7 +110,7 @@ void ret(MpscFifo_t* pQ, Msg_t* pMsg) {
   assert(pMsg->pPool == pQ);
 #if USE_ATOMIC_TYPES
   pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_SEQ_CST);
+  Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
 
 #if DELAY != 0
@@ -121,14 +121,14 @@ void ret(MpscFifo_t* pQ, Msg_t* pMsg) {
   //mfence();
 #else
   pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL); //SEQ_CST);
+  Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
 
 #if DELAY != 0
   usleep(DELAY);
 #endif
 
-  __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE); //SEQ_CST);
+  __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE);
 #endif
   if (pMsg != &pQ->stub) {
     // Don't count adding the stub
