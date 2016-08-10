@@ -147,9 +147,13 @@ void ret(MpscFifo_t* pQ, Msg_t* pMsg) {
   DPF(LDR "ret:-pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
 }
 
+#define COMMENENTED_DEBUG_VERSION 0
+
 /**
  * @see mpscifo.h
  */
+#if COMMENENTED_DEBUG_VERSION
+// Commented and debug version
 Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
 #if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
@@ -221,10 +225,43 @@ Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
   DPF(LDR "rmv_non_stalling: NOT coded\n", ldr());
 #endif
 }
+#else
+// Streamlined with version with no comments or debug
+Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
+  Msg_t* pTail = pQ->pTail;
+  Msg_t* pNext = pTail->pNext;
+  if (pTail == &pQ->stub) {
+    if (pNext == NULL) {
+      return NULL;
+    }
+    pQ->pTail = pNext;
+    pTail = pNext;
+    pNext = pTail->pNext;
+  }
+
+  if (pNext == NULL) {
+    if (pTail != pQ->pHead) {
+      pTail = NULL;
+    } else {
+      add(pQ, &pQ->stub);
+      pNext = pTail->pNext;
+      if (pNext == NULL) {
+        pTail = NULL;
+      }
+    }
+  }
+  if (pTail != NULL) {
+    pQ->pTail = pNext;
+  }
+  return pTail;
+}
+#endif
 
 /**
  * @see mpscifo.h
  */
+#if COMMENENTED_DEBUG_VERSION
+// Commented and debug version
 Msg_t* rmv(MpscFifo_t* pQ) {
 #if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
@@ -299,6 +336,36 @@ Msg_t* rmv(MpscFifo_t* pQ) {
   DPF(LDR "rmv:#NOT coded\n", ldr());
 #endif
 }
+#else
+// Streamlined with version with no comments or debug
+Msg_t* rmv(MpscFifo_t* pQ) {
+  Msg_t* pTail = pQ->pTail;
+  Msg_t* pNext = pTail->pNext;
+  if (pTail == &pQ->stub) {
+    if (pNext == NULL) {
+      return NULL;
+    }
+    pQ->pTail = pNext;
+    pTail = pNext;
+    pNext = pTail->pNext;
+  }
+
+  if (pNext == NULL) {
+    if (pTail == pQ->pHead) {
+      add(pQ, &pQ->stub);
+    }
+
+    pNext = pTail->pNext;
+    while (pNext == NULL) {
+      sched_yield();
+      pNext = pTail->pNext;
+    }
+  }
+
+  pQ->pTail = pNext;
+  return pTail;
+}
+#endif
 
 /**
  * @see mpscifo.h
