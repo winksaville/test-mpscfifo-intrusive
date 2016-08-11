@@ -59,13 +59,14 @@ void deinitMpscFifo(MpscFifo_t* pQ) {
   pQ->pTail = NULL;
 }
 
+#if USE_ATOMIC_TYPES
+
 /**
  * @see mpscifo.h
  */
 void add(MpscFifo_t* pQ, Msg_t* pMsg) {
   DPF(LDR "add:+pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
   DPF(LDR "add: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
-#if USE_ATOMIC_TYPES
   pMsg->pNext = NULL;
   Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
@@ -75,81 +76,38 @@ void add(MpscFifo_t* pQ, Msg_t* pMsg) {
 #endif
 
   pPrev->pNext = pMsg;
-  //mfence();
-#else
-  pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
-  // rmv will stall spinning if preempted at this critical spot
 
-#if DELAY != 0
-  usleep(DELAY);
-#endif
-
-  __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE);
-#endif
+#ifdef COUNT
   if (pMsg != &pQ->stub) {
     // Don't count adding the stub
-#ifdef COUNT
     pQ->count += 1;
-#endif
   }
+#endif
+
   DPF(LDR "add: pQ=%p count=%d pPrev=%p pPrev->pNext=%p\n", ldr(), pQ, pQ->count, pPrev, pPrev->pNext);
   DPF(LDR "add: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
   DPF(LDR "add:-pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
 }
 
-/**
- * Same as add above excepts it asserts(pMsg->pPool == pQ), i.e the message
- * being returned belongs the the pool. This maybe used by multiple
- * entities on the same or different thread. This will never
- * block as it is a wait free algorithm.
- */
-void ret(MpscFifo_t* pQ, Msg_t* pMsg) {
-  DPF(LDR "ret:+pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
-  DPF(LDR "ret: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
-  assert(pMsg->pPool == pQ);
-#if USE_ATOMIC_TYPES
-  pMsg->pNext = NULL;
-  Msg_t* pPrev = __atomic_exchange_n((Msg_t**)&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
-  // rmv will stall spinning if preempted at this critical spot
-
-#if DELAY != 0
-  usleep(DELAY);
-#endif
-
-  pPrev->pNext = pMsg;
-  //mfence();
 #else
+
+// Not using __ATOMIC types and streamlined with no comments or debug
+void add(MpscFifo_t* pQ, Msg_t* pMsg) {
+  // Not using __ATOMIC types and streamlined with no comments or debug
   pMsg->pNext = NULL;
   Msg_t* pPrev = __atomic_exchange_n(&pQ->pHead, pMsg, __ATOMIC_ACQ_REL);
   // rmv will stall spinning if preempted at this critical spot
-
-#if DELAY != 0
-  usleep(DELAY);
-#endif
-
   __atomic_store_n(&pPrev->pNext, pMsg, __ATOMIC_RELEASE);
-#endif
-  if (pMsg != &pQ->stub) {
-    // Don't count adding the stub
-#ifdef COUNT
-    pQ->count += 1;
-#endif
-  }
-  DPF(LDR "ret: pQ=%p count=%d pPrev=%p pPrev->pNext=%p\n", ldr(), pQ, pQ->count, pPrev, pPrev->pNext);
-  DPF(LDR "ret: pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
-  DPF(LDR "ret:-pQ=%p count=%d msg=%p pool=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
 }
 
-#define COMMENENTED_DEBUG_VERSION 0
+#endif
+
+#if USE_ATOMIC_TYPES
 
 /**
  * @see mpscifo.h
  */
-#if COMMENENTED_DEBUG_VERSION
-// Commented and debug version
 Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
-#if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;
   DPF(LDR "rmv_non_stalling:0+pQ=%p count=%d pTail=%p pNext=%p\n", ldr(), pQ, pQ->count, pTail, pNext);
@@ -215,30 +173,30 @@ Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
 #endif
   DPF(LDR "rmv_non_stalling:6-pQ=%p count=%d msg=%p\n", ldr(), pQ, pQ->count, pTail);
   return pTail;
-#else
-  DPF(LDR "rmv_non_stalling: NOT coded\n", ldr());
-#endif
 }
+
 #else
-// Streamlined with version with no comments or debug
+
+// Not using __ATOMIC types and streamlined with no comments or debug
 Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
   Msg_t* pTail = pQ->pTail;
-  Msg_t* pNext = pTail->pNext;
+  Msg_t* pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
   if (pTail == &pQ->stub) {
     if (pNext == NULL) {
       return NULL;
     }
     pQ->pTail = pNext;
     pTail = pNext;
-    pNext = pTail->pNext;
+    pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
   }
 
   if (pNext == NULL) {
-    if (pTail != pQ->pHead) {
+    Msg_t* pHead = __atomic_load_n(&pQ->pHead, __ATOMIC_ACQUIRE);
+    if (pTail != pHead) {
       pTail = NULL;
     } else {
       add(pQ, &pQ->stub);
-      pNext = pTail->pNext;
+      pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
       if (pNext == NULL) {
         pTail = NULL;
       }
@@ -249,15 +207,15 @@ Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
   }
   return pTail;
 }
+
 #endif
+
+#if USE_ATOMIC_TYPES
 
 /**
  * @see mpscifo.h
  */
-#if COMMENENTED_DEBUG_VERSION
-// Commented and debug version
 Msg_t* rmv(MpscFifo_t* pQ) {
-#if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;
   DPF(LDR "rmv:0+pQ=%p count=%d pHead=%p pHead->pNext=%p pTail=%p pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pHead, pQ->pHead->pNext, pQ->pTail, pQ->pTail->pNext);
@@ -326,46 +284,48 @@ Msg_t* rmv(MpscFifo_t* pQ) {
   DPF(LDR "rmv:8 got msg pQ=%p count=%d pQ->pTail=%p pQ->pTail->pNext=%p\n", ldr(), pQ, pQ->count, pQ->pTail, pQ->pTail->pNext);
   DPF(LDR "rmv:9-got msg pQ=%p count=%d msg=%p pool=%p pNext=%p arg1=%lu arg2=%lu\n", ldr(), pQ, pQ->count, pTail, pTail->pPool, pTail->pNext, pTail->arg1, pTail->arg2);
   return pTail;
-#else
-  DPF(LDR "rmv:#NOT coded\n", ldr());
-#endif
 }
+
 #else
-// Streamlined with version with no comments or debug
+
 Msg_t* rmv(MpscFifo_t* pQ) {
+  // Not using __ATOMIC types and streamlined with no comments or debug
   Msg_t* pTail = pQ->pTail;
-  Msg_t* pNext = pTail->pNext;
+  Msg_t* pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
   if (pTail == &pQ->stub) {
     if (pNext == NULL) {
       return NULL;
     }
     pQ->pTail = pNext;
     pTail = pNext;
-    pNext = pTail->pNext;
+    pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
   }
 
   if (pNext == NULL) {
-    if (pTail == pQ->pHead) {
+    Msg_t* pHead = __atomic_load_n(&pQ->pHead, __ATOMIC_ACQUIRE);
+    if (pTail == pHead) {
       add(pQ, &pQ->stub);
     }
 
-    pNext = pTail->pNext;
+    pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
     while (pNext == NULL) {
       sched_yield();
-      pNext = pTail->pNext;
+      pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
     }
   }
 
   pQ->pTail = pNext;
   return pTail;
 }
+
 #endif
+
+#if USE_ATOMIC_TYPES
 
 /**
  * @see mpscifo.h
  */
 Msg_t* rmv_no_dbg_on_empty(MpscFifo_t* pQ) {
-#if USE_ATOMIC_TYPES
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = pTail->pNext;
   if ((pNext == NULL) && (pTail == &pQ->stub)) {
@@ -374,7 +334,11 @@ Msg_t* rmv_no_dbg_on_empty(MpscFifo_t* pQ) {
   } else {
     return rmv(pQ);
   }
+}
+
 #else
+
+Msg_t* rmv_no_dbg_on_empty(MpscFifo_t* pQ) {
   Msg_t* pTail = pQ->pTail;
   Msg_t* pNext = __atomic_load_n(&pTail->pNext, __ATOMIC_ACQUIRE);
   if ((pNext == NULL) && (pTail == &pQ->stub)) {
@@ -383,20 +347,21 @@ Msg_t* rmv_no_dbg_on_empty(MpscFifo_t* pQ) {
   } else {
     return rmv(pQ);
   }
-#endif
 }
+
+#endif
 
 /**
  * @see mpscfifo.h
  */
 void ret_msg(Msg_t* pMsg) {
   if ((pMsg != NULL) && (pMsg->pPool != NULL)) {
-    ret(pMsg->pPool, pMsg);
+    add(pMsg->pPool, pMsg);
   } else {
     if (pMsg == NULL) {
-      DPF(LDR "ret:#No msg msg=%p\n", ldr(), pMsg);
+      DPF(LDR "ret_msg:#No msg msg=%p\n", ldr(), pMsg);
     } else {
-      DPF(LDR "ret:#No pool msg=%p pool=%p arg1=%lu arg2=%lu\n",
+      DPF(LDR "ret_msg:#No pool msg=%p pool=%p arg1=%lu arg2=%lu\n",
           ldr(), pMsg, pMsg->pPool, pMsg->arg1, pMsg->arg2);
     }
   }

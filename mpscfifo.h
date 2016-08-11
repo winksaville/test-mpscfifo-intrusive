@@ -35,7 +35,7 @@ typedef struct Msg_t Msg_t;
 
 #define VOLATILE volatile
 
-#define USE_ATOMIC_TYPES 1
+#define USE_ATOMIC_TYPES 0
 
 typedef struct Msg_t {
 #if USE_ATOMIC_TYPES
