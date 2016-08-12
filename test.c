@@ -132,14 +132,14 @@ uint64_t MsgPool_deinit(MsgPool_t* pool) {
     }
 
     DPF(LDR "MsgPool_deinit: pool=%p deinitMpscFifo fifo=%p\n", ldr(), pool, &pool->fifo);
-    msgs_processed += deinitMpscFifo(&pool->fifo);
+    msgs_processed = deinitMpscFifo(&pool->fifo);
 
     DPF(LDR "MsgPool_deinit: pool=%p free msgs=%p\n", ldr(), pool, pool->msgs);
     free(pool->msgs);
     pool->msgs = NULL;
     pool->msg_count = 0;
   }
-  DPF(LDR "MsgPool_deinit:-pool=%p\n", ldr(), pool);
+  DPF(LDR "MsgPool_deinit:-pool=%p msgs_processed=%lu\n", ldr(), pool, msgs_processed);
   return msgs_processed;
 }
 
@@ -278,8 +278,8 @@ static void* client(void* p) {
 #endif
       if (msg != NULL) {
         cp->cmds_processed += 1;
-        DPF(LDR "client:^param=%p msg=%p arg1=%lu msgs_processed=%lu\n",
-            ldr(), p, msg, msg->arg1, cp->msgs_processed);
+        DPF(LDR "client:^param=%p msg=%p arg1=%lu cmds_processed=%lu\n",
+            ldr(), p, msg, msg->arg1, cp->cmds_processed);
         switch (msg->arg1) {
           case CmdDoNothing: {
             DPF(LDR "client:+param=%p msg=%p CmdDoNothing\n", ldr(), p, msg);
@@ -412,8 +412,8 @@ bool multi_thread_main(const uint32_t client_count, const uint64_t loops,
   ClientParams* clients;
   MsgPool_t pool;
   uint32_t clients_created = 0;
-  uint64_t msgs_sent = 0;
-  uint64_t no_msgs_count = 0;
+  uint64_t mt_msgs_sent = 0;
+  uint64_t mt_no_msgs = 0;
 
   struct timespec time_start;
   struct timespec time_looping;
@@ -516,11 +516,11 @@ bool multi_thread_main(const uint32_t client_count, const uint64_t loops,
             ldr(), client, msg, msg->arg1);
         add(&client->cmdFifo, msg);
         sem_post(&client->sem_waiting);
-        msgs_sent += 1;
+        mt_msgs_sent += 1;
       } else {
-        no_msgs_count += 1;
-        DPF(LDR "multi_thread_msg: Whoops msg == NULL c=%u msgs_sent=%lu no_msgs_count=%lu\n",
-            ldr(), c, msgs_sent, no_msgs_count);
+        mt_no_msgs += 1;
+        DPF(LDR "multi_thread_msg: Whoops msg == NULL c=%u mt_msgs_sent=%lu mt_no_msgs=%lu\n",
+            ldr(), c, mt_msgs_sent, mt_no_msgs);
         sched_yield();
       }
     }
@@ -632,15 +632,15 @@ done:
   clock_gettime(CLOCK_REALTIME, &time_complete);
 
   uint64_t expected_value = loops * clients_created;
-  uint64_t sum = msgs_sent + no_msgs_count;
+  uint64_t sum = mt_msgs_sent + mt_no_msgs;
   if (sum != expected_value) {
     printf(LDR "multi_thread_msg: ERROR sum=%lu != expected_value=%lu\n",
        ldr(), sum, expected_value);
     error = true;
   }
 
-  printf(LDR "multi_thread_msg: msgs_processed=%lu msgs_sent=%lu "
-      "no_msgs_count=%lu\n", ldr(), msgs_processed, msgs_sent, no_msgs_count);
+  printf(LDR "multi_thread_msg: cmds_processed=%lu msgs_processed=%lu mt_msgs_sent=%lu "
+      "mt_no_msgs=%lu\n", ldr(), cmds_processed, msgs_processed, mt_msgs_sent, mt_no_msgs);
 
   DPF(LDR "time_start=%lu.%lu\n", ldr(), time_start.tv_sec, time_start.tv_nsec);
   DPF(LDR "time_looping=%lu.%lu\n", ldr(), time_looping.tv_sec, time_looping.tv_nsec);
@@ -681,9 +681,12 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  u_int32_t client_count = strtoul(argv[1], NULL, 10);
-  u_int64_t loops = strtoull(argv[2], NULL, 10);
-  u_int32_t msg_count = strtoul(argv[3], NULL, 10);
+  u_int32_t client_count;
+  sscanf(argv[1], "%u", & client_count);
+  u_int64_t loops;
+  sscanf(argv[2], "%lu", &loops);
+  u_int32_t msg_count;
+  sscanf(argv[3], "%i", &msg_count);
 
   printf("test client_count=%u loops=%lu msg_count=%u\n", client_count, loops, msg_count);
 
