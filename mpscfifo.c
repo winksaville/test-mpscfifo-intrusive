@@ -61,6 +61,7 @@ uint64_t deinitMpscFifo(MpscFifo_t* pQ) {
   pQ->pTail = NULL;
   pQ->count = 0;
   pQ->msgs_processed = 0;
+  DPF(LDR "deinitMpscFifo:-pQ=%p msgs_processed=%lu\n", ldr(), pQ, msgs_processed);
   return msgs_processed;
 }
 
