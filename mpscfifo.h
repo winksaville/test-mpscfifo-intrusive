@@ -58,6 +58,7 @@ typedef struct MpscFifo_t {
   Msg_t* pTail __attribute__(( aligned (64) ));
 #endif
   VOLATILE _Atomic(uint32_t) count;
+  uint64_t msgs_processed;
   Msg_t stub;
 } MpscFifo_t;
 
@@ -76,8 +77,10 @@ extern MpscFifo_t *initMpscFifo(MpscFifo_t *pQ);
 
 /**
  * Deinitialize the MpscFifo_t, assumes the fifo is empty.
+ *
+ * @return number of messages removed.
  */
-extern void deinitMpscFifo(MpscFifo_t *pQ);
+extern uint64_t deinitMpscFifo(MpscFifo_t *pQ);
 
 /**
  * Add a Msg_t to the Queue. This maybe used by multiple

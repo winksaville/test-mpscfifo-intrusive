@@ -43,6 +43,7 @@ MpscFifo_t* initMpscFifo(MpscFifo_t* pQ) {
   pQ->pHead = &pQ->stub;
   pQ->pTail = &pQ->stub;
   pQ->count = 0;
+  pQ->msgs_processed = 0;
   pQ->stub.pNext = NULL;
   pQ->stub.pPool = NULL;
   pQ->stub.pRspQ = NULL;
@@ -54,9 +55,13 @@ MpscFifo_t* initMpscFifo(MpscFifo_t* pQ) {
 /**
  * @see mpscfifo.h
  */
-void deinitMpscFifo(MpscFifo_t* pQ) {
+uint64_t deinitMpscFifo(MpscFifo_t* pQ) {
+  uint64_t msgs_processed = pQ->msgs_processed;
   pQ->pHead = NULL;
   pQ->pTail = NULL;
+  pQ->count = 0;
+  pQ->msgs_processed = 0;
+  return msgs_processed;
 }
 
 #if USE_ATOMIC_TYPES
@@ -166,11 +171,12 @@ Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
       }
     }
   }
-#ifdef COUNT
   if (pTail != NULL) {
+    pQ->msgs_processed += 1;
+#ifdef COUNT
     pQ->count -= 1;
-  }
 #endif
+  }
   DPF(LDR "rmv_non_stalling:6-pQ=%p count=%d msg=%p\n", ldr(), pQ, pQ->count, pTail);
   return pTail;
 }
@@ -203,6 +209,7 @@ Msg_t* rmv_non_stalling(MpscFifo_t* pQ) {
     }
   }
   if (pTail != NULL) {
+    pQ->msgs_processed += 1;
     pQ->pTail = pNext;
   }
   return pTail;
@@ -274,6 +281,7 @@ Msg_t* rmv(MpscFifo_t* pQ) {
 
   // All paths above guranttee that pNext != NULL and we
   // can remove pTail by setting pQ->pTail = pNext.
+  pQ->msgs_processed += 1;
   pQ->pTail = pNext;
 #ifdef COUNT
   pQ->count -= 1; // Decrement number of msgs
@@ -314,6 +322,7 @@ Msg_t* rmv(MpscFifo_t* pQ) {
     }
   }
 
+  pQ->msgs_processed += 1;
   pQ->pTail = pNext;
   return pTail;
 }

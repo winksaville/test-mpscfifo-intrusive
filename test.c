@@ -108,8 +108,9 @@ done:
   return error;
 }
 
-void MsgPool_deinit(MsgPool_t* pool) {
+uint64_t MsgPool_deinit(MsgPool_t* pool) {
   DPF(LDR "MsgPool_deinit:+pool=%p msgs=%p\n", ldr(), pool, pool->msgs);
+  uint64_t msgs_processed = 0;
   if (pool->msgs != NULL) {
     // Empty the pool
     DPF(LDR "MsgPool_deinit: pool=%p pool->msg_count=%u\n", ldr(), pool, pool->msg_count);
@@ -131,7 +132,7 @@ void MsgPool_deinit(MsgPool_t* pool) {
     }
 
     DPF(LDR "MsgPool_deinit: pool=%p deinitMpscFifo fifo=%p\n", ldr(), pool, &pool->fifo);
-    deinitMpscFifo(&pool->fifo);
+    msgs_processed += deinitMpscFifo(&pool->fifo);
 
     DPF(LDR "MsgPool_deinit: pool=%p free msgs=%p\n", ldr(), pool, pool->msgs);
     free(pool->msgs);
@@ -139,6 +140,7 @@ void MsgPool_deinit(MsgPool_t* pool) {
     pool->msg_count = 0;
   }
   DPF(LDR "MsgPool_deinit:-pool=%p\n", ldr(), pool);
+  return msgs_processed;
 }
 
 Msg_t* MsgPool_get_msg(MsgPool_t* pool) {
@@ -171,6 +173,7 @@ typedef struct ClientParams {
   MsgPool_t pool;
 
   uint64_t error_count;
+  uint64_t cmds_processed;
   uint64_t msgs_processed;
   sem_t sem_ready;
   sem_t sem_waiting;
@@ -224,6 +227,7 @@ static void* client(void* p) {
   ClientParams* cp = (ClientParams*)p;
 
   cp->error_count = 0;
+  cp->cmds_processed = 0;
   cp->msgs_processed = 0;
 
   if (cp->max_peer_count > 0) {
@@ -272,8 +276,8 @@ static void* client(void* p) {
     sched_yield();
     while((msg = rmv_non_stalling(&cp->cmdFifo)) != NULL) {
 #endif
-      cp->msgs_processed += 1;
       if (msg != NULL) {
+        cp->cmds_processed += 1;
         DPF(LDR "client:^param=%p msg=%p arg1=%lu msgs_processed=%lu\n",
             ldr(), p, msg, msg->arg1, cp->msgs_processed);
         switch (msg->arg1) {
@@ -359,11 +363,11 @@ done:
 
   // deinit cmd fifo
   DPF(LDR "client: param=%p deinit cmdFifo=%p\n", ldr(), p, &cp->cmdFifo);
-  deinitMpscFifo(&cp->cmdFifo);
+  cp->msgs_processed = deinitMpscFifo(&cp->cmdFifo);
 
   // deinit msg pool
   DPF(LDR "client: param=%p deinit msg pool=%p\n", ldr(), p, &cp->pool);
-  MsgPool_deinit(&cp->pool);
+  cp->msgs_processed += MsgPool_deinit(&cp->pool);
 
   DPF(LDR "client:-param=%p error_count=%lu\n", ldr(), p, cp->error_count);
   return NULL;
@@ -529,7 +533,6 @@ done:
 
   DPF(LDR "multi_thread_msg: done, send CmdDisconnectAll %u clients\n",
       ldr(), clients_created);
-  uint64_t msgs_processed = 0;
   for (uint32_t i = 0; i < clients_created; i++) {
     ClientParams* client = &clients[i];
 
@@ -591,6 +594,8 @@ done:
   clock_gettime(CLOCK_REALTIME, &time_stopped);
 
   DPF(LDR "multi_thread_msg: done, joining %u clients\n", ldr(), clients_created);
+  uint64_t cmds_processed = 0;
+  uint64_t msgs_processed = 0;
   for (uint32_t i = 0; i < clients_created; i++) {
     ClientParams* client = &clients[i];
     // Wait until the thread completes
@@ -610,6 +615,7 @@ done:
           ldr(), i, (void*)client, client->error_count);
       error = true;
     }
+    cmds_processed += client->cmds_processed;
     msgs_processed += client->msgs_processed;
     DPF(LDR "multi_thread_msg: clients[%u]=%p msgs_processed=%lu error_count=%lu\n",
         ldr(), i, (void*)client, client->msgs_processed, client->error_count);
@@ -617,11 +623,11 @@ done:
 
   // Deinit the cmdFifo
   DPF(LDR "multi_thread_msg: deinit cmdFifo=%p\n", ldr(), &cmdFifo);
-  deinitMpscFifo(&cmdFifo);
+  msgs_processed += deinitMpscFifo(&cmdFifo);
 
   // Deinit the msg pool
   DPF(LDR "multi_thread_msg: deinit msg pool=%p\n", ldr(), &pool);
-  MsgPool_deinit(&pool);
+  msgs_processed += MsgPool_deinit(&pool);
 
   clock_gettime(CLOCK_REALTIME, &time_complete);
 
@@ -651,6 +657,10 @@ done:
 
   uint64_t processing_ns = diff_timespec_ns(&time_complete, &time_looping);
   printf(LDR "processing=%.3fs\n", ldr(), processing_ns / ns_flt);
+  uint64_t cmds_per_sec = (cmds_processed * ns_u64) / processing_ns;
+  printf(LDR "cmds_per_sec=%lu\n", ldr(), cmds_per_sec);
+  float ns_per_cmd = (float)processing_ns / (float)cmds_processed;
+  printf(LDR "ns_per_cmd=%.1fns\n", ldr(), ns_per_cmd);
   uint64_t msgs_per_sec = (msgs_processed * ns_u64) / processing_ns;
   printf(LDR "msgs_per_sec=%lu\n", ldr(), msgs_per_sec);
   float ns_per_msg = (float)processing_ns / (float)msgs_processed;
