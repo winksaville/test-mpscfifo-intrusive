@@ -35,7 +35,7 @@
 _Static_assert(sizeof(uint64_t) >= sizeof(void*), "Expect sizeof uint64_t >= sizeof void*");
 
 const uint64_t ns_u64 = 1000000000ll;
-const float ns_flt = 1000000000.0;
+const double ns_flt = 1000000000.0;
 
 _Atomic(uint64_t) gTick = 0;
 
