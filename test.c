@@ -14,6 +14,7 @@
 #endif
 
 #include "mpscfifo.h"
+#include "diff_timespec.h"
 #include "dpf.h"
 
 #include <sys/types.h>
@@ -34,24 +35,7 @@
  */
 _Static_assert(sizeof(uint64_t) >= sizeof(void*), "Expect sizeof uint64_t >= sizeof void*");
 
-const uint64_t ns_u64 = 1000000000ll;
-const double ns_flt = 1000000000.0;
-
 _Atomic(uint64_t) gTick = 0;
-
-/**
- * Return the difference between to timespec in nano seconds
- */
-double diff_timespec_ns(struct timespec* t1, struct timespec* t2) {
-   double t1_ns = (t1->tv_sec * ns_flt) + t1->tv_nsec;
-   double t2_ns = (t2->tv_sec * ns_flt) + t2->tv_nsec;
-   double diff = t1_ns - t2_ns;
-   DPF("diff_timespec_ns: diff=%.10f\n", diff);
-   return diff;
-}
-
-typedef _Atomic(uint64_t) Counter;
-//static typedef uint64_t Counter;
 
 typedef struct MsgPool_t {
   Msg_t* msgs;
